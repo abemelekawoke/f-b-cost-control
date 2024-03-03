@@ -1,0 +1,145 @@
+CREATE VIEW purchased_items 
+AS
+SELECT b.id, a.name, SUM(b.amount) AS total_purchased, c.name AS Measurement
+FROM setups_itemlists a, items_items b, setups_measurement c
+WHERE a.id=b.name_id AND
+      b.measurement_id=c.id
+GROUP BY b.name_id
+
+CREATE total_sold_items 
+AS
+SELECT c.id, c.name, (SUM(b.ingredient)*a.quantity) AS ingredients
+FROM sales_sales a, portions_menuportions b, setups_itemlists c
+WHERE 
+a.menu_name_id=b.menu_name_id 
+AND
+b.item_name_id=c.id
+GROUP BY b.item_name_id
+
+CREATE VIEW available_items 
+AS
+SELECT a.id, a.name, (a.total_purchased-b.total_sold) AS available_items
+FROM total_purchased_items a, total_sold_items b
+WHERE 
+a.name=b.name 
+GROUP BY a.name
+
+CREATE VIEW item_balance 
+AS
+SELECT a.id, a.name, a.total_purchased/1000 AS total_purchased, b.total_sold, c.available_items/1000 AS total_available
+FROM total_purchased_items a, total_sold_items b, available_items c
+WHERE 
+a.name=b.name 
+GROUP BY a.name
+
+
+CREATE VIEW recipe_cost 
+AS
+SELECT c.id, c.menu_name, (SUM(b.item_cost*a.quantity)) AS recipe_item_cost
+FROM sales_sales a, portions_menuportions b, menus_menus c
+WHERE 
+a.menu_name_id=b.menu_name_id
+AND
+b.menu_name_id = c.id
+
+GROUP BY a.menu_name_id
+
+CREATE VIEW menus_sold 
+AS
+SELECT a.id, b.menu_name, SUM(a.quantity) AS total_sold
+FROM sales_sales a, menus_menus b
+WHERE a.menu_name_id=b.id
+GROUP BY b.menu_name
+
+
+CREATE VIEW total_menu_cost 
+AS
+SELECT c.id, c.menu_name,a.recipe_item_cost,c.production_cost, (a.recipe_item_cost + c.production_cost)*b.total_margin AS total_margin_cost, ((a.recipe_item_cost + c.production_cost)*b.total_margin) + (a.recipe_item_cost + c.production_cost) As total_menu_cost
+FROM recipe_cost a, margins_allmargins b, menus_menus c
+WHERE 
+a.id=b.menu_name_id
+AND
+b.menu_name_id = c.id
+
+GROUP BY a.menu_name
+
+
+
+CREATE VIEW total_income_sale 
+AS
+SELECT  SUM(a.total_sold) As total_sale, sum(b.total_cost) AS total_income
+FROM menus_sold a, total_menu_cost b
+WHERE
+a.menu_name = b.menu_name
+
+
+CREATE VIEW total_margin_cost 
+AS
+SELECT  a.menu_name, (SUM(c.item_cost) + d.production_cost) AS menu_cost,((SUM(c.item_cost) + d.production_cost) * b.profit_margin) As profit, ((SUM(c.item_cost) + d.production_cost) * b.taxt_margin) As tax, ((SUM(c.item_cost) + d.production_cost) * b.service_charge_margin) As service_charge, (((SUM(c.item_cost) + d.production_cost) * b.profit_margin)) + (((SUM(c.item_cost) + d.production_cost) * b.taxt_margin)) + (((SUM(c.item_cost) + d.production_cost) * b.service_charge_margin)) AS total_margin_cost
+FROM total_menu_cost a, margins_allmargins b, portions_menuportions c, menus_menus d
+WHERE
+a.id = b.menu_name_id
+AND
+c.menu_name_id = d.id
+AND
+a.menu_name = d.menu_name
+GROUP BY b.menu_name_id
+
+
+
+CREATE VIEW total_menu_margin 
+AS
+SELECT  a.menu_name, sum(b.quantity) AS quantity, (a.menu_net_cost * sum(b.quantity)) AS total_menu_cost, (a.profit * sum(b.quantity)) AS total_menu_profit, (a.tax * sum(b.quantity)) AS total_menu_tax, (a.service_charge * sum(b.quantity)) AS total_menu_service_charge
+FROM menu_margin a, sales_sales b
+WHERE
+a.id = b.menu_name_id
+GROUP BY b.menu_name_id
+
+CREATE VIEW profit_by_menu 
+AS
+SELECT a.id,a.menu_name, (a.total_sold * b.profit) AS menu_profit
+FROM menus_sold a, total_margin_cost b
+WHERE
+a.menu_name = b.menu_name
+GROUP BY a.menu_name
+
+CREATE VIEW total_profit 
+AS
+SELECT sum(c.menu_profit) AS total_profit
+FROM  profit_by_menu c
+
+
+CREATE VIEW tax_by_menu 
+AS
+SELECT a.id,a.menu_name, (a.total_sold * b.tax) AS menu_tax
+FROM menus_sold a, total_margin_cost b
+WHERE
+a.menu_name = b.menu_name
+GROUP BY a.menu_name
+
+
+CREATE VIEW total_tax 
+AS
+SELECT sum(c.menu_tax) AS total_tax
+FROM  tax_by_menu c
+
+
+CREATE VIEW service_charge_by_menu 
+AS
+SELECT a.id,a.menu_name, (a.total_sold * b.service_charge) AS menu_service_charge
+FROM menus_sold a, total_margin_cost b
+WHERE
+a.menu_name = b.menu_name
+GROUP BY a.menu_name
+
+CREATE VIEW total_service_charge 
+AS
+SELECT sum(c.menu_service_charge) AS total_service_charge
+FROM  service_charge_by_menu c
+
+
+CREATE VIEW sales_mix_share
+AS
+SELECT a.menu_name, 100 * a.total_sold / b.total_sale AS sales_mix_share
+FROM  menus_sold a , total_sale b
+group by a.menu_name
